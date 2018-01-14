@@ -1,0 +1,74 @@
+prepare:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: python
+    script: |
+      with open('{pars[run_template]}') as t:
+        with open('{outputs[runcard]}','w') as f:
+          f.write(t.read().format(
+            __NEVENTS__ = {pars[nevents]},
+            __RNGSEED__ = {pars[seed]},
+            __EBEAM1__ = 3500,
+            __EBEAM2__ = 3500,
+            __LHEVERSION__ = 1.0
+          ))
+      with open('{pars[param_template]}') as t:
+        with open('{outputs[parcard]}','w') as f:
+          f.write(t.read().format(
+            __COUPLING_GQ__ = {pars[gq]},
+            __COUPLING_GX__ = {pars[gx]},
+            __MASS_MDM__ = {pars[mdm]},
+            __MASS_MHs__ = {pars[mhs]},
+            __MASS_MZp__ = {pars[mzp]}
+          ))
+  environment:
+    environment_type: 'docker-encapsulated'
+    image: lukasheinrich/genericmg5pydelphes-base
+    imagetag: mg260
+  publisher:
+    publisher_type: interpolated-pub
+    publish:
+      parcard: '{outputs[parcard]}'
+      runcard: '{outputs[runcard]}'
+
+generate:
+  process:
+    process_type: interpolated-script-cmd
+    script: |
+      export PYTHONPATH={modeldir}
+      cp {proccard} proc.dat
+      cat << EOF >> proc.dat
+      launch
+      {parcard}
+      {runcard}
+      EOF
+      mg5 -f proc.dat
+      cp /code/madgraphout/Events/run_01/run_01_tag_1_banner.txt {banner_file}
+  environment:
+    environment_type: 'docker-encapsulated'
+    image: lukasheinrich/genericmg5pydelphes-base
+    imagetag: mg260
+  publisher:
+    publisher_type: interpolated-pub
+    publish:
+      banner_file: '{banner_file}'
+extract:
+  process:
+    process_type: interpolated-script-cmd
+    interpreter: python
+    script: |
+      import json
+      import xml.etree.ElementTree as ET
+      tree = ET.parse('{banner_file}')
+      xsec_unit  = tree.findall('./header/MGGenerationInfo')[0].text.splitlines()[-1].split()[3].replace('(','').replace(')','')
+      xsec_value = float(tree.findall('./header/MGGenerationInfo')[0].text.splitlines()[-1].split()[-1])
+      with open('{xsecfile}','w') as xsecfile:
+        json.dump({{'xsec': xsec_value, 'xsec_unit': xsec_unit}}, xsecfile)
+  environment:
+    environment_type: 'docker-encapsulated'
+    image: lukasheinrich/genericmg5pydelphes-base
+    imagetag: mg260
+  publisher:
+    publisher_type: frompar-pub
+    outputmap:
+      xsecfile: xsecfile

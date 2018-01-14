@@ -1,0 +1,35 @@
+stages:
+- name: prepare
+  dependencies: [init]
+  scheduler:
+    scheduler_type: jq-stage
+    bindings:
+      init: {'$wflowref': ['.init[]','.']}
+    stepscript: |
+      [{
+        pars: .init[][],
+        outputs: {
+          parcard: "{workdir}/parcard.dat",
+          runcard: "{workdir}/runcard.dat",
+        }
+      }]
+    step: {$ref: 'steps.yml#/prepare'}
+- name: generate
+  dependencies: [prepare]
+  scheduler:
+    scheduler_type: singlestep-stage
+    parameters:
+      proccard: {stages: init, output: proccard, unwrap: true}
+      parcard: {stages: prepare, output: parcard}
+      runcard: {stages: prepare, output: runcard}
+      modeldir: {stages: init, output: modeldir, unwrap: true}
+      banner_file: '{workdir}/banner.txt'
+    step: {$ref: 'steps.yml#/generate'}
+- name: extract_xsec
+  dependencies: [generate]
+  scheduler:
+    scheduler_type: singlestep-stage
+    parameters:
+      banner_file: {stages: generate, output: banner_file, unwrap: true}
+      xsecfile: '{workdir}/xsec.json'
+    step: {$ref: 'steps.yml#/extract'}

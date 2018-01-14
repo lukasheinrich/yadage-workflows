@@ -1,0 +1,5 @@
+import model DarkHiggs2MDM
+generate p p > zp > n1 n1 hs QED<=2, (hs > b b~)
+add process p p > zp > n1 n1 hs j QED<=2, (hs > b b~)
+output madgraphout
+
