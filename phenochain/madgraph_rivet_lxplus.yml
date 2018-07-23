@@ -1,0 +1,187 @@
+#note all this is only necessary because of missing 
+#overlay and OCI compatible runtime on lxplus
+#the future should be brighter
+stages:
+- scheduler:
+    parameters:
+    - value: sm
+      key: model
+    - value: /code/defaultparam.yml
+      key: inputpars
+    - value: ! '{workdir}/param.dat'
+      key: parametercard
+    step:
+      environment:
+        image: lukasheinrich/lxplusified-phenoexample
+        envscript: ''
+        env: {}
+        resources: []
+        par_mounts: []
+        environment_type: docker-encapsulated
+        imagetag: latest
+        workdir: null
+      process:
+        process_type: string-interpolated-cmd
+        cmd: /code/paramfromyaml.py --madgraph -f {inputpars} {model} {parametercard}
+      publisher:
+        publisher_type: frompar-pub
+        outputmap:
+          parcard: parametercard
+    scheduler_type: singlestep-stage
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions: []
+  name: prepare
+- scheduler:
+    parameters:
+    - value:
+        unwrap: true
+        output: parcard
+        stages: prepare
+        expression_type: stage-output-selector
+      key: paramcard
+    - value: ! '{workdir}/output.lhe'
+      key: outputlhe
+    - value:
+        unwrap: true
+        output: nevents
+        stages: init
+        expression_type: stage-output-selector
+      key: events
+    step:
+      environment:
+        image: lukasheinrich/lxplusified-phenoexample
+        envscript: ''
+        env: {}
+        resources: []
+        par_mounts: []
+        environment_type: docker-encapsulated
+        imagetag: latest
+        workdir: null
+      process:
+        process_type: string-interpolated-cmd
+        cmd: ln -s /code/steer.dat .;cp -r /code/madgraph-1.5.10 .; export PATH=$PWD/madgraph-1.5.10/bin:$PATH;
+          /code/steermadgraph.py /code/proc.dat /code/default_run.dat {paramcard}
+          {outputlhe} -e {events}
+      publisher:
+        publisher_type: frompar-pub
+        outputmap:
+          lhefile: outputlhe
+    scheduler_type: singlestep-stage
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions:
+    - prepare
+    - init
+  name: madgraph
+- scheduler:
+    parameters:
+    - value:
+        unwrap: true
+        output: lhefile
+        stages: madgraph
+        expression_type: stage-output-selector
+      key: lhefile
+    - value: ! '{workdir}/output.hepmc'
+      key: outputhepmc
+    - value:
+        unwrap: true
+        output: nevents
+        stages: init
+        expression_type: stage-output-selector
+      key: events
+    step:
+      environment:
+        image: lukasheinrich/lxplusified-phenoexample
+        envscript: ''
+        env: {}
+        resources: []
+        par_mounts: []
+        environment_type: docker-encapsulated
+        imagetag: latest
+        workdir: null
+      process:
+        process_type: string-interpolated-cmd
+        cmd: ln -s /code/pythia.tmpl .; ln -s /code/example_main .;/code/steerpythia.py
+          {lhefile} {outputhepmc} -e {events}
+      publisher:
+        publisher_type: frompar-pub
+        outputmap:
+          hepmcfile: outputhepmc
+    scheduler_type: singlestep-stage
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions:
+    - madgraph
+  name: pythia
+- scheduler:
+    parameters:
+    - value: ! '{workdir}/output.yoda'
+      key: outputyoda
+    - value:
+        output: hepmcfile
+        stages: pythia
+        expression_type: stage-output-selector
+      key: inputhepmc
+    - value:
+        unwrap: true
+        output: rivet_analysis
+        stages: init
+        expression_type: stage-output-selector
+      key: analysis
+    step:
+      environment:
+        image: lukasheinrich/lxplusified-rivet
+        envscript: ''
+        env: {}
+        resources: []
+        par_mounts: []
+        environment_type: docker-encapsulated
+        imagetag: latest
+        workdir: null
+      process:
+        process_type: string-interpolated-cmd
+        cmd: rivet -a {analysis} -H {outputyoda} {inputhepmc}
+      publisher:
+        publisher_type: frompar-pub
+        outputmap:
+          yodafile: outputyoda
+    scheduler_type: singlestep-stage
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions:
+    - pythia
+    - init
+  name: rivet
+- scheduler:
+    parameters:
+    - value:
+        output: yodafile
+        stages: rivet
+        expression_type: stage-output-selector
+      key: inputyoda
+    - value: ! '{workdir}/plots'
+      key: yodaplots
+    step:
+      environment:
+        image: lukasheinrich/lxplusified-rivet
+        envscript: ''
+        env: {}
+        resources: []
+        par_mounts: []
+        environment_type: docker-encapsulated
+        imagetag: latest
+        workdir: null
+      process:
+        process_type: string-interpolated-cmd
+        cmd: rivet-mkhtml -o {yodaplots} {inputyoda}
+      publisher:
+        publisher_type: frompar-pub
+        outputmap:
+          plots: yodaplots
+    scheduler_type: singlestep-stage
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions:
+    - rivet
+  name: plots
