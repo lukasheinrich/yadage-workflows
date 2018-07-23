@@ -1,0 +1,257 @@
+stages:
+- scheduler:
+    workflow_opts:
+      discover: true
+    parameters:
+    - value: 300
+      key: neutralino_mass
+    - value: 750
+      key: stop_mass
+    - value: 1000
+      key: events
+    scheduler_type: singlestep-stage
+    workflow:
+      stages:
+      - scheduler:
+          parameters:
+          - value:
+              unwrap: true
+              output: neutralino_mass
+              stages: init
+              expression_type: stage-output-selector
+            key: neutralino_mass
+          - value:
+              unwrap: true
+              output: stop_mass
+              stages: init
+              expression_type: stage-output-selector
+            key: stop_mass
+          - value: ! '{workdir}/spectrum.slha'
+            key: outputSLHA
+          - value: /templates/slha_template.slha
+            key: template
+          step:
+            environment:
+              image: lukasheinrich/lxplusified-checkmate_w_util
+              envscript: ''
+              env: {}
+              resources: []
+              par_mounts: []
+              environment_type: docker-encapsulated
+              imagetag: latest
+              workdir: null
+            process:
+              process_type: string-interpolated-cmd
+              cmd: /checkmate_util/utilcli.py prepare_slha {template} {stop_mass} {neutralino_mass}
+                {outputSLHA}
+            publisher:
+              publisher_type: frompar-pub
+              outputmap:
+                outputSLHA: outputSLHA
+          scheduler_type: singlestep-stage
+        dependencies:
+          dependency_type: jsonpath_ready
+          expressions:
+          - init
+        name: prepslha
+      - scheduler:
+          parameters:
+          - value: ! '{workdir}/runcard.dat'
+            key: herwigruncard
+          - value: 1234
+            key: seed
+          - value: ! '{workdir}/out.hepmc'
+            key: hepmcfile
+          - value:
+              unwrap: true
+              output: events
+              stages: init
+              expression_type: stage-output-selector
+            key: events
+          - value:
+              unwrap: true
+              output: outputSLHA
+              stages: prepslha
+              expression_type: stage-output-selector
+            key: slhafile
+          step:
+            environment:
+              image: lukasheinrich/lxplusified-checkmate_w_util
+              envscript: ''
+              env: {}
+              resources: []
+              par_mounts: []
+              environment_type: docker-encapsulated
+              imagetag: latest
+              workdir: null
+            process:
+              process_type: string-interpolated-cmd
+              cmd: /checkmate_util/utilcli.py prepare_runcard -l {slhafile} -e {events} -s {seed}
+                -r recast -o {hepmcfile} /templates/herwig_template.in {herwigruncard}
+                && /home/checkmate/tools/herwig/bin/Herwig++ read {herwigruncard}
+                && /home/checkmate/tools/herwig/bin/Herwig++ run recast.run
+            publisher:
+              publisher_type: frompar-pub
+              outputmap:
+                hepmcfile: hepmcfile
+          scheduler_type: singlestep-stage
+        dependencies:
+          dependency_type: jsonpath_ready
+          expressions:
+          - prepslha
+        name: herwig
+      - scheduler:
+          parameters:
+          - value: ! '{workdir}/xsec.json'
+            key: xsecfile
+          - value:
+              unwrap: true
+              output: stop_mass
+              stages: init
+              expression_type: stage-output-selector
+            key: stop_mass
+          step:
+            environment:
+              image: lukasheinrich/lxplusified-checkmate_w_util
+              envscript: ''
+              env: {}
+              resources: []
+              par_mounts: []
+              environment_type: docker-encapsulated
+              imagetag: latest
+              workdir: null
+            process:
+              process_type: string-interpolated-cmd
+              cmd: |
+                cp -r /home/checkmate/tools/nllfast/ here;cd here;echo {{"\"xsec\"": "\"$(./nllfast st cteq 750|awk '{{print $4}}'|tail -n 1)\"", "\"unit\"": "\"pb\""}} > {xsecfile}
+            publisher:
+              publisher_type: frompar-pub
+              outputmap:
+                xsecfile: xsecfile
+          scheduler_type: singlestep-stage
+        dependencies:
+          dependency_type: jsonpath_ready
+          expressions:
+          - init
+        name: compute_xsec
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions: []
+  name: upstream
+- scheduler:
+    workflow_opts:
+      discover: true
+    parameters:
+    - value:
+        unwrap: true
+        output: xsecfile
+        stages: upstream.[0].compute_xsec
+        expression_type: stage-output-selector
+      key: xsecfile
+    - value:
+        unwrap: true
+        output: hepmcfile
+        stages: upstream.[0].herwig
+        expression_type: stage-output-selector
+      key: hepmcfile
+    - value: atlas_conf_2013_024
+      key: analysis
+    scheduler_type: singlestep-stage
+    workflow:
+      stages:
+      - scheduler:
+          parameters:
+          - value:
+              unwrap: true
+              output: xsecfile
+              stages: init
+              expression_type: stage-output-selector
+            key: xsecfile
+          - value:
+              unwrap: true
+              output: hepmcfile
+              stages: init
+              expression_type: stage-output-selector
+            key: hepmcfile
+          - value:
+              unwrap: true
+              output: analysis
+              stages: init
+              expression_type: stage-output-selector
+            key: analysis
+          - value: ! '{workdir}/checkmate.dat'
+            key: runcardfile
+          - value: 9876
+            key: seed
+          - value: ! '{workdir}/checkmaterun'
+            key: outputdir
+          step:
+            environment:
+              image: lukasheinrich/lxplusified-checkmate_w_util
+              envscript: ''
+              env: {}
+              resources: []
+              par_mounts: []
+              environment_type: docker-encapsulated
+              imagetag: latest
+              workdir: null
+            process:
+              process_type: string-interpolated-cmd
+              cmd: /checkmate_util/utilcli.py  prepare_checkmate -n recast -s {seed} -o {outputdir}
+                /templates/checkmate_template.dat {xsecfile} {hepmcfile} {analysis}
+                {runcardfile} && /home/checkmate/tools/checkmate/bin/CheckMATE {runcardfile}
+            publisher:
+              publisher_type: frompar-pub
+              outputmap:
+                outputdir: outputdir
+          scheduler_type: singlestep-stage
+        dependencies:
+          dependency_type: jsonpath_ready
+          expressions:
+          - init
+        name: checkmate
+      - scheduler:
+          parameters:
+          - value: ! '{workdir}/limits.json'
+            key: limitresultfile
+          - value:
+              unwrap: true
+              output: outputdir
+              stages: checkmate
+              expression_type: stage-output-selector
+            key: outputdir
+          - value:
+              unwrap: true
+              output: analysis
+              stages: init
+              expression_type: stage-output-selector
+            key: analysis
+          step:
+            environment:
+              image: lukasheinrich/lxplusified-checkmate_w_util
+              envscript: ''
+              env: {}
+              resources: []
+              par_mounts: []
+              environment_type: docker-encapsulated
+              imagetag: latest
+              workdir: null
+            process:
+              process_type: string-interpolated-cmd
+              cmd: /checkmate_util/utilcli.py recast_format {outputdir}/recast/evaluation/{analysis}_cl_limits.txt
+                {limitresultfile}
+            publisher:
+              publisher_type: frompar-pub
+              outputmap:
+                limitresultfile: limitresultfile
+          scheduler_type: singlestep-stage
+        dependencies:
+          dependency_type: jsonpath_ready
+          expressions:
+          - checkmate
+        name: format_results
+  dependencies:
+    dependency_type: jsonpath_ready
+    expressions:
+    - upstream
+  name: downstream
