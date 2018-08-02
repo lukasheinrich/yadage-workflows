@@ -7,7 +7,7 @@ stages:
       key: neutralino_mass
     - value: 750
       key: stop_mass
-    - value: 200
+    - value: 1000
       key: events
     scheduler_type: singlestep-stage
     workflow:
@@ -42,7 +42,7 @@ stages:
               workdir: null
             process:
               process_type: string-interpolated-cmd
-              cmd: utilcli.py prepare_slha {template} {stop_mass} {neutralino_mass}
+              cmd: /checkmate_util/utilcli.py prepare_slha {template} {stop_mass} {neutralino_mass}
                 {outputSLHA}
             publisher:
               publisher_type: frompar-pub
@@ -86,7 +86,7 @@ stages:
               workdir: null
             process:
               process_type: string-interpolated-cmd
-              cmd: utilcli.py prepare_runcard -l {slhafile} -e {events} -s {seed}
+              cmd: /checkmate_util/utilcli.py prepare_runcard -l {slhafile} -e {events} -s {seed}
                 -r recast -o {hepmcfile} /templates/herwig_template.in {herwigruncard}
                 && /home/checkmate/tools/herwig/bin/Herwig++ read {herwigruncard}
                 && /home/checkmate/tools/herwig/bin/Herwig++ run recast.run
@@ -122,7 +122,8 @@ stages:
               workdir: null
             process:
               process_type: string-interpolated-cmd
-              cmd: utilcli.py compute_xsec {stop_mass} cteq {xsecfile}
+              cmd: |
+                cp -r /home/checkmate/tools/nllfast/ here;cd here;echo {{"\"xsec\"": "\"$(./nllfast st cteq 750|awk '{{print $4}}'|tail -n 1)\"", "\"unit\"": "\"pb\""}} > {xsecfile}
             publisher:
               publisher_type: frompar-pub
               outputmap:
