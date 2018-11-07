@@ -1,0 +1,6 @@
+stages:
+  - name: krbtest
+    scheduler:
+      scheduler_type: singlestep-stage
+      parameters: {}
+      step: {$ref: 'steps.yml#/krbtest'}

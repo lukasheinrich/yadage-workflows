@@ -1,0 +1,14 @@
+krbtest:
+  process:
+    process_type: 'interpolated-script-cmd'
+    script: |
+      /recast_auth/getkrb.sh
+      klist
+  publisher:
+    publisher_type: 'constant-pub'
+    publish: {}
+  environment:
+    environment_type: 'docker-encapsulated'
+    image: cern/cc7-base
+    resources:
+    - GRIDProxy
