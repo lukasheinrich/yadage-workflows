@@ -3,10 +3,11 @@ krbtest:
     process_type: 'interpolated-script-cmd'
     script: |
       /recast_auth/getkrb.sh
-      klist
+      klist > {outputfile}
   publisher:
-    publisher_type: 'constant-pub'
-    publish: {}
+    publisher_type: 'interpolated-pub'
+    publish:
+      outputfile: '{outputfile}'
   environment:
     environment_type: 'docker-encapsulated'
     image: cern/cc7-base
