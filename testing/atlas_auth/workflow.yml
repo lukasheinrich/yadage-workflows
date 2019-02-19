@@ -2,5 +2,6 @@ stages:
   - name: krbtest
     scheduler:
       scheduler_type: singlestep-stage
-      parameters: {}
+      parameters:
+        outputfile: '{workdir}/output.txt'
       step: {$ref: 'steps.yml#/krbtest'}
